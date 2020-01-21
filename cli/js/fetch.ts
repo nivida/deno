@@ -3,7 +3,8 @@ import {
   assert,
   createResolvable,
   notImplemented,
-  isTypedArray
+  isTypedArray,
+  isIterable
 } from "./util.ts";
 import * as domTypes from "./dom_types.ts";
 import { TextDecoder, TextEncoder } from "./text_encoding.ts";
@@ -340,7 +341,7 @@ interface FetchResponse {
   headers: Array<[string, string]>;
 }
 
-async function sendFetchReq(
+async function dispatchFetch(
   url: string,
   method: string | null,
   headers: domTypes.Headers | null,
@@ -365,8 +366,7 @@ async function sendFetchReq(
   return (await sendAsync(dispatch.OP_FETCH, args, zeroCopy)) as FetchResponse;
 }
 
-/** Fetch a resource from the network. */
-export async function fetch(
+async function sendFetchReq(
   input: domTypes.Request | string,
   init?: domTypes.RequestInit
 ): Promise<Response> {
@@ -430,7 +430,7 @@ export async function fetch(
   }
 
   while (remRedirectCount) {
-    const fetchResponse = await sendFetchReq(url, method, headers, body);
+    const fetchResponse = await dispatchFetch(url, method, headers, body);
 
     const response = new Response(
       url,
@@ -473,4 +473,21 @@ export async function fetch(
   }
   // Return a network error due to too many redirections
   throw notImplemented();
+}
+
+/** Fetch a resource from the network. */
+export async function fetch(
+  input: domTypes.Request | string | domTypes.Request[] | string[],
+  init?: domTypes.RequestInit
+): Promise<Response|Response[]> {
+  if (isIterable(input)) {
+    const requests = [];
+    input.forEach(request => {
+      requests.push(sendFetchReq(request, init));
+    });
+
+    return Promise.all(requests);
+  }
+
+  return sendFetchReq(input, init);
 }
